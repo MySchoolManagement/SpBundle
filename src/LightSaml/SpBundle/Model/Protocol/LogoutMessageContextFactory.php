@@ -14,6 +14,7 @@ namespace LightSaml\SpBundle\Model\Protocol;
 use LightSaml\Context\Profile\MessageContext;
 use LightSaml\Model\Assertion\Issuer;
 use LightSaml\Model\Assertion\NameID;
+use LightSaml\Model\Metadata\SingleLogoutService;
 use LightSaml\Model\Protocol\LogoutRequest;
 use LightSaml\Model\Protocol\LogoutResponse;
 use LightSaml\Helper as LightSamlHelper;
@@ -21,6 +22,7 @@ use LightSaml\Model\Protocol\SamlMessage;
 use LightSaml\Model\Protocol\Status;
 use LightSaml\Model\Protocol\StatusCode;
 use LightSaml\SamlConstants;
+use LightSaml\SpBundle\Exception\IdPZeroSingleLogoutEndpointsException;
 use LightSaml\State\Sso\SsoSessionState;
 use LightSaml\Store\EntityDescriptor\EntityDescriptorStoreInterface;
 
@@ -50,9 +52,18 @@ class LogoutMessageContextFactory
      * @param SsoSessionState $sessionState
      *
      * @return MessageContext
+     *
+     * @throws IdPZeroSingleLogoutEndpointsException
      */
     public function request(SsoSessionState $sessionState)
     {
+        $idpEntityId = $sessionState->getIdpEntityId();
+        $logoutService = $this->getSingleLogoutService($idpEntityId);
+
+        if ($logoutService === null) {
+            throw new IdPZeroSingleLogoutEndpointsException();
+        }
+
         $logoutRequest = new LogoutRequest();
         $this->initMessage($logoutRequest);
 
@@ -60,9 +71,9 @@ class LogoutMessageContextFactory
         $logoutRequest->setNameID(new NameID(
             $sessionState->getNameId(), $sessionState->getNameIdFormat()
         ));
-        $logoutRequest->setDestination($this->getSingleLogoutServiceLocation());
+        $logoutRequest->setDestination($logoutService->getLocation());
 
-        return $this->surroundWithContext($logoutRequest);
+        return $this->surroundWithContext($logoutRequest, $logoutService);
     }
 
     /**
@@ -96,40 +107,48 @@ class LogoutMessageContextFactory
             ->setIssuer(new Issuer($this->spEntityId));
     }
 
-    /**
-     * @return string
-     */
-    private function getSingleLogoutServiceLocation()
+    private function getSingleLogoutService($idpEntityId)
     {
-        return $this->getIdpSsoDescriptor()->getFirstSingleLogoutService()->getLocation();
+        $idpSsoDescriptor = $this->getIdpSsoDescriptor($idpEntityId);
+
+        if ($idpSsoDescriptor !== null) {
+            return $idpSsoDescriptor->getFirstSingleLogoutService();
+        }
+
+        return null;
     }
 
     /**
-     * @return string
-     */
-    private function getSingleLogoutServiceBindingType()
-    {
-        return $this->getIdpSsoDescriptor()->getFirstSingleLogoutService()->getBinding();
-    }
-
-    /**
+     * @param string $idpEntityId
+     *
      * @return \LightSaml\Model\Metadata\IdpSsoDescriptor|null
      */
-    private function getIdpSsoDescriptor()
+    private function getIdpSsoDescriptor($idpEntityId)
     {
-        return $this->entityDescriptorStore->get(0)->getFirstIdpSsoDescriptor();
+        $entityDescriptor = $this->entityDescriptorStore->get($idpEntityId);
+        $idpDescriptors = $entityDescriptor ? $entityDescriptor->getAllIdpSsoDescriptors() : [];
+
+        // find the first sso descriptor with an sso logout
+        foreach ($idpDescriptors as $ssoDescriptor) {
+            if ($ssoDescriptor->getFirstSingleLogoutService() !== null) {
+                return $ssoDescriptor;
+            }
+        }
+
+        return null;
     }
 
     /**
-     * @param SamlMessage $samlMessage
+     * @param SamlMessage           $samlMessage
+     * @param SingleLogoutService   $singleLogoutService
      *
      * @return MessageContext
      */
-    private function surroundWithContext(SamlMessage $samlMessage)
+    private function surroundWithContext(SamlMessage $samlMessage, SingleLogoutService $singleLogoutService)
     {
         $context = new MessageContext();
         $context->setMessage($samlMessage);
-        $context->setBindingType($this->getSingleLogoutServiceBindingType());
+        $context->setBindingType($singleLogoutService->getBinding());
 
         return $context;
     }
