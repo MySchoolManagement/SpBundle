@@ -16,6 +16,7 @@ use LightSaml\Context\Profile\MessageContext;
 use LightSaml\Model\Protocol\LogoutRequest;
 use LightSaml\Model\Protocol\LogoutResponse;
 use LightSaml\SamlConstants;
+use LightSaml\SpBundle\Exception\IdPZeroSingleLogoutEndpointsException;
 use LightSaml\SpBundle\Model\Protocol\LogoutMessageContextFactory;
 use LightSaml\State\Sso\SsoSessionState;
 use LightSaml\Store\Sso\SsoStateStoreInterface;
@@ -70,17 +71,23 @@ class LightSamlLogoutHandler implements LogoutSuccessHandlerInterface
         $this->session = $request->getSession();
         $samlMessage = $this->getIncomingMessage($request);
 
-        if (null === $samlMessage) {
-            return $this->sendLogoutRequestToIP();
-        }
+        try {
+            if (null === $samlMessage) {
+                return $this->sendLogoutRequestToIP();
+            }
 
-        if ($samlMessage instanceof LogoutResponse) {
-            return $this->handleLogoutResponseFromIP($samlMessage);
-        } elseif ($samlMessage instanceof LogoutRequest) {
-            return $this->handleLogoutRequestFromIP($samlMessage);
-        }
+            if ($samlMessage instanceof LogoutResponse) {
+                return $this->handleLogoutResponseFromIP($samlMessage);
+            } elseif ($samlMessage instanceof LogoutRequest) {
+                return $this->handleLogoutRequestFromIP($samlMessage);
+            }
 
-        throw new InvalidSamlMessageForLogoutException($samlMessage);
+            throw new InvalidSamlMessageForLogoutException($samlMessage);
+        } catch (IdPZeroSingleLogoutEndpointsException $ex) {
+            $this->invalidateSession();
+
+            return $this->createRedirectToHomepage();
+        }
     }
 
     /**
