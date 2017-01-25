@@ -86,7 +86,7 @@ class LightSamlLogoutHandler implements LogoutSuccessHandlerInterface
         } catch (IdPZeroSingleLogoutEndpointsException $ex) {
             $this->invalidateSession();
 
-            return $this->createRedirectToHomepage();
+            return $this->createLogoutResponse();
         }
     }
 
