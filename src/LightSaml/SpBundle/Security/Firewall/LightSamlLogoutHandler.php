@@ -42,6 +42,8 @@ class LightSamlLogoutHandler implements LogoutSuccessHandlerInterface
     private $router;
     /** @var LogoutMessageContextFactory */
     private $logoutMessageContextFactory;
+    /** @var string */
+    private $logoutRouteName;
 
     /**
      * LightSamlLogoutHandler constructor.
@@ -50,17 +52,20 @@ class LightSamlLogoutHandler implements LogoutSuccessHandlerInterface
      * @param SsoStateStoreInterface      $ssoStateStore
      * @param RouterInterface             $router
      * @param LogoutMessageContextFactory $logoutMessageContextFactory
+     * @param string                      $logoutRouteName
      */
     public function __construct(
         BindingFactoryInterface $bindingFactory,
         SsoStateStoreInterface $ssoStateStore,
         RouterInterface $router,
-        LogoutMessageContextFactory $logoutMessageContextFactory
+        LogoutMessageContextFactory $logoutMessageContextFactory,
+        $logoutRouteName = 'homepage'
     ) {
         $this->bindingFactory = $bindingFactory;
         $this->ssoStateStore = $ssoStateStore;
         $this->router = $router;
         $this->logoutMessageContextFactory = $logoutMessageContextFactory;
+        $this->logoutRouteName = $logoutRouteName;
     }
 
     /**
@@ -182,7 +187,7 @@ class LightSamlLogoutHandler implements LogoutSuccessHandlerInterface
      */
     protected function createLogoutResponse()
     {
-        return new RedirectResponse($this->router->generate('homepage'));
+        return new RedirectResponse($this->router->generate($this->logoutRouteName));
     }
 
     /**
